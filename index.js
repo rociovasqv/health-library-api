@@ -19,19 +19,14 @@ app.get("/", (req, res) => {
 });
 
 // Conexión a la base de datos
-const connectionDB = async () =>
-{
-    try{
-        await connectDB()
-         console.log("Conexión a la base de datos establecida con éxito.");
-        }
-    catch(err){
+connectDB.connect((err) => {
+    if (err) {
         console.error("Error al conectar a la base de datos:", err.message);
         process.exit(1); // Detener el proceso si no se puede conectar
+    } else {
+        console.log("Conexión a la base de datos establecida con éxito.");
     }
-
-};
-connectionDB()
+});
 
 // Iniciar servidor
 app.listen(PORT, () => {
