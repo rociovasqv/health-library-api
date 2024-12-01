@@ -1,17 +1,39 @@
 import express from 'express';
+import connectDB from './config/db.js';
+import libroRoutes from './routes/libroRoutes.js'
 
-const app = express()
+const app = express();
 
-const PORT = 3000
+const PORT = 4000
 
-// import express from 'express';
+app.use(express.json());
 
-// const app = express();
+//Rutas
+app.use("/", libroRoutes);
 
-app.get('/libros',(req,res)=> res.send('Obteniendo libros'));
-app.post('/libros',(req,res)=> res.send('Creando nuevos libros'));
-app.put('/libros',(req,res)=> res.send('Actualizando libros'));
-app.delete('/libros',(req,res)=> res.send('Eliminando libros'))
 
-app.listen(PORT)
-console.log("Estás escuchando en el puerto 3000");
+// Endpoint raíz
+app.get("/", (req, res) => {
+    console.log("Bienvenido");
+    res.send({ message: "Welcome to my API" });
+});
+
+// Conexión a la base de datos
+const connectionDB = async () =>
+{
+    try{
+        await connectDB()
+         console.log("Conexión a la base de datos establecida con éxito.");
+        }
+    catch(err){
+        console.error("Error al conectar a la base de datos:", err.message);
+        process.exit(1); // Detener el proceso si no se puede conectar
+    }
+
+};
+connectionDB()
+
+// Iniciar servidor
+app.listen(PORT, () => {
+    console.log("Escuchando en el puerto " + PORT);
+});
