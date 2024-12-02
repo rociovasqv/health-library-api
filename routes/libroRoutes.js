@@ -5,7 +5,9 @@ const router = express.Router()
 
 router.get('/libros', libroControllers.listarLibros);
 router.post('/libros',libroControllers.registrarLibro);
-router.put('/libros/:id',(req,res)=> libroControllers.editarLibro);
-router.delete('/libros/:id',(req,res)=> libroControllers.eliminarLibro)
+router.get('/libros/editar/:id', libroControllers.getLibro)
+router.get('/libros/:id', libroControllers.buscarLibro)
+router.put('/libros/:id',libroControllers.editarLibro);
+router.delete('/libros/:id',libroControllers.eliminarLibro)
 
 export default router;

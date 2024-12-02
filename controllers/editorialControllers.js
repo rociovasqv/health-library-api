@@ -1,5 +1,12 @@
 
-//Verificación y creación de la nueva editorial
+//Verificación de editorial
+const verificarEditorial = async (db, nombre) => {
+  const query = `SELECT id_editorial FROM Editorial WHERE nombre = ?`;
+  const [results] = await db.query(query, [nombre]);
+  return results.length > 0 ? results[0].id_editorial : null;
+};
+
+//Creación de la nueva editorial
 
 const agregarEditorial = async (db, nombre, pais) => {
     const [rows] = await db.query(
@@ -18,12 +25,12 @@ const agregarEditorial = async (db, nombre, pais) => {
     return result.insertId;
   };
 
-//Relacionar la editorial con el libro existente
-  const relacionarLE = async (db, id_libro, id_editorial) => {
-    await db.query(
-      "INSERT INTO Libro_editorial (id_libro, id_editorial) VALUES (?, ?)",
-      [id_libro, id_editorial]
-    );
-  };
+//Relacionar editorial con el libro existente
+const relacionarLE = async (db, id_libro, id_editorial) => {
+  // Eliminar relaciones existentes
+await db.query("DELETE FROM libro_editorial WHERE id_libro = ?", [id_libro]);
+// Insertar nueva relación
+await db.query("INSERT INTO libro_editorial (id_libro, id_editorial) VALUES (?, ?)", [id_libro, id_editorial]);
+}
 
-export default {agregarEditorial, relacionarLE};
+export default {verificarEditorial, agregarEditorial, relacionarLE};
