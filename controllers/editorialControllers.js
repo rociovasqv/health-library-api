@@ -1,8 +1,8 @@
 
 //Verificación de editorial
-const verificarEditorial = async (db, nombre) => {
-  const query = `SELECT id_editorial FROM Editorial WHERE nombre = ?`;
-  const [results] = await db.query(query, [nombre]);
+const verificarEditorial = async (db, nombre, pais) => {
+  const query = `SELECT id_editorial FROM Editorial WHERE nombre = ? AND pais = ?`;
+  const [results] = await db.query(query, [nombre, pais]);
   return results.length > 0 ? results[0].id_editorial : null;
 };
 
@@ -26,6 +26,7 @@ const agregarEditorial = async (db, nombre, pais) => {
   };
 
 //Relacionar editorial con el libro existente
+
 const relacionarLE = async (db, id_libro, id_editorial) => {
   // Eliminar relaciones existentes
 await db.query("DELETE FROM libro_editorial WHERE id_libro = ?", [id_libro]);

@@ -3,7 +3,7 @@ import editorialControllers from "./editorialControllers.js";
 import autorControllers from "./autorControllers.js";
 import categoriaControllers from "./categoriaControllers.js";
 
-// CREATE - Crear/registrar nuevos libros
+// CREATE - Crear/registrar nuevos libros --------------------------------------------------------------------------------------------------------------------------
 
 const registrarLibro = async (req,res) => {
     const {
@@ -60,10 +60,8 @@ const registrarLibro = async (req,res) => {
         console.error("Error al registrar un libro", error);
         res.status(500).json({ error: 'Error al registrar el libro.' });
     }
-}
-
-
-//READ / GET ALL - Listar libros 
+};
+//READ / GET ALL - Listar libros --------------------------------------------------------------------------------------------------------------------------
 const listarLibros = async (req, res) => {
     try {
       const db = req.app.get('db');
@@ -102,8 +100,7 @@ const listarLibros = async (req, res) => {
       res.status(500).json({ error: "Error interno del servidor" });
     }
   };
-
-//READ - GET ONE - Mostrar un libro
+//READ - GET ONE - Mostrar un libro --------------------------------------------------------------------------------------------------------------------------
 const buscarLibro = async (req,res) =>
 {
     try{
@@ -148,10 +145,9 @@ const buscarLibro = async (req,res) =>
         console.error("Error al buscar el libro", error);
         res.status(500).json({ error: 'Error al buscar el libro.' });
     }
-}
+};
 
-//READ - GET ONE FOR EDIT (UPDATE) - Mostrar un libro para la edición
-
+//READ - GET ONE FOR EDIT (UPDATE) - Mostrar un libro para la edición --------------------------------------------------------------------------------------------------------------------------
 const getLibro = async (req,res) =>
 {
     try{
@@ -186,10 +182,9 @@ const getLibro = async (req,res) =>
         console.error("Error al obtener el libro para editar", error);
         res.status(500).json({ error: 'Error al obtener el libro.' });
     }
-    }
+    };
 
-// UPDATE - Editar/actualizar libros
-
+// UPDATE - Editar/actualizar libros --------------------------------------------------------------------------------------------------------------------------
 const editarLibro = async (req,res) =>
 {
     const id_libro = req.params.id
@@ -225,7 +220,7 @@ const editarLibro = async (req,res) =>
         await autorControllers.relacionarLA(db, id_libro, id_autor);
     
         // Verificar y actualizar editorial
-        let id_editorial = await editorialControllers.verificarEditorial(db,nombre_editorial);
+        let id_editorial = await editorialControllers.verificarEditorial(db,nombre_editorial,pais_editorial);
         if(!id_editorial){
             id_editorial = await editorialControllers.agregarEditorial(db, nombre_editorial, pais_editorial);
         }
@@ -243,7 +238,8 @@ const editarLibro = async (req,res) =>
     console.error("Error al actualizar un libro", error);
     res.status(500).json({ error: 'Error al actualizar el libro. Intente de nuevo' });
     }
-}
+};
+// DELETE - Eliminar libro --------------------------------------------------------------------------------------------------------------------------
 const eliminarLibro = async (req, res) => {
     const db = req.app.get('db');
     const id_libro = req.params.id;

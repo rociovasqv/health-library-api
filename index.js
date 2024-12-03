@@ -1,6 +1,8 @@
 import express from 'express';
 import connectDB from './config/db.js';
-import libroRoutes from './routes/libroRoutes.js'
+import libroRoutes from './routes/libroRoutes.js';
+import usuarioRoutes from './routes/usuarioRoutes.js';
+import prestamoRoutes from './routes/prestamoRoutes.js';
 
 const app = express();
 
@@ -16,6 +18,8 @@ app.get('/', (req, res) => {
 
 //Rutas
 app.use("/", libroRoutes);
+app.use("/", usuarioRoutes);
+app.use("/", prestamoRoutes);
 
 //Iniciar el servidor y la conexión con la base de datos
 const iniciarServidor = async () => {
