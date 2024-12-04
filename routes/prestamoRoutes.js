@@ -6,7 +6,7 @@ const router = express.Router();
 router.get('/prestamos', prestamoControllers.mostrarPrestamos)
 router.post('/prestamos',prestamoControllers.crearPrestamo);
 router.get('/prestamos/:id', prestamoControllers.getPrestamo);
-router.put('/prestamos/editar/:id', prestamoControllers.editarPrestamo);
+router.put('/prestamos/:id', prestamoControllers.actualizarPrestamo);
 router.delete('/prestamos/:id', prestamoControllers.eliminarPrestamo);
 
 export default router;

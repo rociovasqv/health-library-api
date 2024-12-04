@@ -1,3 +1,5 @@
+
+
 //CREATE PRESTAMO - Crear un nuevo prestamo ---------------------------------------------------------------------------------------------------------
 const crearPrestamo = async (req,res) =>
     {
@@ -12,11 +14,9 @@ const crearPrestamo = async (req,res) =>
         if (!fecha_devolucion || !nombre_usuario || !apellido_usuario || !Array.isArray(libros) || libros.length === 0) {
             return res.status(400).json({ error: "La fecha de devolucion, los libros (detalles) y el nombre completo del usuario son obligatorios para realizar el préstamo." });
         }
-        //Verificar disponibilidad de los libros
-    
-        const listaLibros = libros.map(libro => libro.id_libro);
+        //Verificar disponibilidad de los libros (los libros son un array de IDS)
         const queryDisponible = `SELECT id_libro, disponible FROM Libro WHERE id_libro IN (?) AND disponible = 0`;
-        const [noDisponible] = await db.query(queryDisponible, [listaLibros]);
+        const [noDisponible] = await db.query(queryDisponible, [libros]);
         
         if (noDisponible.length > 0) {
             const librosNo = noDisponible.map(libro => libro.id_libro);
@@ -28,7 +28,7 @@ const crearPrestamo = async (req,res) =>
         try{
             await connection.beginTransaction();
     
-            //Verificación - Buscar id_usuario a partir del nombre y apellido del usuario
+            //Verificación - Buscar usuario a partir del nombre y apellido y su id
             const queryU = `SELECT id_usuario FROM Usuario WHERE nombre = ? AND apellido = ? LIMIT 1`;
             const [ resultU] = await connection.query(queryU, [nombre_usuario, apellido_usuario]);
             
@@ -38,22 +38,20 @@ const crearPrestamo = async (req,res) =>
               }
               const id_usuario = resultU[0].id_usuario;
               
-            //Operación del total de libros solitados para el prestamo
-            const total_libros = libros.length;
-    
             //Crear préstamo
+            const total_libros = libros.length;
             const queryP = `INSERT INTO Prestamo (fecha_devolucion, id_usuario, total_libros) VALUES (?, ?, ?)`
             const [results] = await connection.query(queryP, [fecha_devolucion, id_usuario, total_libros]);
             const id_prestamo = results.insertId;
     
             // Agregar los libros del préstamo (detalles)
             const queryD = `INSERT INTO Detalles_prestamo (id_libro, id_prestamo) VALUES ?` ;
-            const valoresDetalles = libros.map((id_libro) => [id_libro, id_prestamo]);
+            const valoresDetalles = libros.map(id_libro => [id_libro, id_prestamo]);
             await connection.query(queryD, [valoresDetalles]);
     
             //Actualizar estado de los libros
-            const actualDisponible = `UPDATE Libro SET disponible = 0 WHERE id_libro IN (?)` ;
-            await connection.query(actualDisponible, [listaLibros]);
+           const cambioEstado = `UPDATE Libro SET disponible = 0 WHERE id_libro IN (?)`
+            await connection.query(cambioEstado,[libros]);
     
             await connection.commit();               //Confirmar transacción
             res.status(201).json({ message: "Préstamo creado con éxito.", id_prestamo });
@@ -132,108 +130,66 @@ const getPrestamo = async (req, res) => {
     }
 };
 
-const editarPrestamo = async (req,res) =>
-{
-    const {
-        fecha_devolucion,
-        estado,
-        nombre_usuario,
-        apellido_usuario,
-        detalles
-    } = req.body;
+//UPDATE - actualizar y finalizar préstamo -----------------------------------------------------------------------------------------------------------------------
 
+const actualizarPrestamo = async (req, res) => {
+    const db = req.app.get('db');
     const id_prestamo = parseInt(req.params.id, 10);
 
-    if (!id_prestamo || !fecha_devolucion || !estado || !nombre_usuario || !apellido_usuario || !Array.isArray(detalles) || detalles.length === 0) {
-        return res.status(400).json({ error: "La fecha de devolucion, los detalles y el nombre completo del usuario son obligatorios para actualizar el préstamo." });
+    if (isNaN(id_prestamo)) {
+        return res.status(400).json({ error: "El ID del préstamo debe ser un número válido." });
     }
-    const db = req.app.get('db');
+
     const connection = await db.getConnection();
 
-    try{
+    try {
         await connection.beginTransaction();
 
-        //Verificación - Buscar id_usuario a partir del nombre y apellido del usuario
-        const queryU = `SELECT id_usuario FROM Usuario WHERE nombre = ? AND apellido = ? LIMIT 1`;
-        const [resultU] = await connection.query(queryU, [nombre_usuario, apellido_usuario]);
-        
-        if (resultU.length === 0) {
+        // Verificar si el préstamo existe y está activo
+        const [prestamo] = await connection.query(
+            `SELECT id_prestamo FROM Prestamo WHERE id_prestamo = ? AND estado = 'activo'`,
+            [id_prestamo]
+        );
+
+        if (prestamo.length === 0) {
             await connection.rollback();
-            return res.status(404).json({ error: "Usuario no encontrado." });
-          }
-          const id_usuario = resultU[0].id_usuario;
+            return res.status(404).json({ error: "Préstamo no encontrado o ya finalizado." });
+        }
 
-        //Actualizar datos de préstamo
-        const queryP = `UPDATE Prestamo
-        SET fecha_devolucion = ?, estado = ?, id_usuario = ?, total_libros = ? WHERE id_prestamo = ?`;
-        const total_libros = detalles.length;
-        const [resultsP] = await connection.query(queryP, [fecha_devolucion, estado, id_usuario, total_libros, id_prestamo]);
+        // Actualizar el estado del préstamo
+        await connection.query(
+            `UPDATE Prestamo SET estado = 'devuelto' WHERE id_prestamo = ?`,
+            [id_prestamo]
+        );
 
-        if (resultsP.affectedRows === 0) {
-            await connection.rollback();
-            return res.status(404).json({ error: "Préstamo no encontrado." });
-          }
-          // Eliminar detalles existentes
-          const queryED = `DELETE FROM Detalles_prestamo WHERE id_prestamo = ?`;
-          await connection.query(queryED, [id_prestamo]);
-          
-          // Insertar nuevos detalles
-          const queryD = `INSERT INTO Detalles_prestamo (id_libro, id_prestamo) VALUES ?`;
-          const valoresDetalles = detalles.map((id_libro) => [id_libro, id_prestamo]);
-          await connection.query(queryD, [valoresDetalles]);
+        // Obtener los libros relacionados al préstamo
+        const [libros] = await connection.query(
+            `SELECT id_libro FROM Detalles_prestamo WHERE id_prestamo = ?`,
+            [id_prestamo]
+        );
 
-          await connection.commit();
-          res.status(200).json({message: "Préstamo actualizado con éxito. "});
-    }
-    catch(error){
+        const listaLibros = libros.map(libro => libro.id_libro);
+
+        // Actualizar el estado de los libros
+        await connection.query(
+            `UPDATE Libro SET disponible = 1 WHERE id_libro IN (?)`,
+            [listaLibros]
+        );
+
+        await connection.commit();
+        res.status(200).json({ message: "Préstamo finalizado con éxito." });
+    } catch (error) {
         await connection.rollback();
-        console.error('Error al acutalizar el préstamo', error);
-        res.status(500).json({error: 'Error al actualizar préstamo. '});
-    }
-    finally{
+        console.error("Error al finalizar préstamo:", error);
+        res.status(500).json({ error: "Error al finalizar el préstamo." });
+    } finally {
         connection.release();
     }
 };
 
-const eliminarPrestamo = async (req,res) =>
-    {
-        const db = req.app.get('db');
-        const id_prestamo = parseInt(req.params.id, 10);
+export default {crearPrestamo, mostrarPrestamos, getPrestamo, actualizarPrestamo};
 
-    if (isNaN(id_prestamo)) {
-        return res.status(400).json({ error: "El ID del préstamo debe ser un número válido." });
-      }
-      const connection = await db.getConnection();
-      try{
-        await connection.beginTransaction();
-        //Eliminar detalles del préstamo seleccionado
-        const queryD = `DELETE FROM Detalles_prestamo WHERE id_prestamo = ?`;
-        await connection.query(queryD, [id_prestamo]);
-
-        //Eliminar préstamo
-        const queryP = `DELETE FROM Prestamo WHERE id_prestamo = ?`;
-        const [resultsP] = await connection.query(queryP, [id_prestamo]);
-
-        if (resultsP.affectedRows === 0) {
-            await connection.rollback();
-            return res.status(404).json({ error: "Préstamo no encontrado." });
-          }
-          await connection.commit();
-          res.status(200).json({ message: "Préstamo eliminado con éxito." });
-        }
-      catch(error){
-        await connection.rollback();
-        console.error("Error al eliminar el préstamo", error);
-        res.status(500).json({error: 'Error al eliminar el préstamo. '})
-      }
-      finally{
-        connection.release();
-      }   
-    };
-
-export default {crearPrestamo, mostrarPrestamos, getPrestamo, editarPrestamo, eliminarPrestamo};
-
-//GET ONE - Mostrar préstamos de un usuario sin los detalles
+//GET ONE - Mostrar préstamos de un usuario sin los detalles------------------------------------------------------------------------------------------
 
 // const getPrestamo = async (req,res) =>
 // {
@@ -253,7 +209,7 @@ export default {crearPrestamo, mostrarPrestamos, getPrestamo, editarPrestamo, el
 //     }
 // };
 
-// Listar para editar
+// READ - Listar para editar ------------------------------------------------------------------------------------------------------------------------------
 // const listarPrestamo = async (req,res) =>
 // {
 //     try{
@@ -267,3 +223,105 @@ export default {crearPrestamo, mostrarPrestamos, getPrestamo, editarPrestamo, el
 //         res.status(500).json({error: 'Error del servidor al listar préstamos.' })
 //     }
 // };
+
+//PUT - Editar préstamos --------------------------------------------------------------------------------------------------------------------------------------
+// const editarPrestamo = async (req,res) =>
+//     {
+//         const {
+//             fecha_devolucion,
+//             estado,
+//             nombre_usuario,
+//             apellido_usuario,
+//             detalles
+//         } = req.body;
+    
+//         const id_prestamo = parseInt(req.params.id, 10);
+    
+//         if (!id_prestamo || !fecha_devolucion || !estado || !nombre_usuario || !apellido_usuario || !Array.isArray(detalles) || detalles.length === 0) {
+//             return res.status(400).json({ error: "La fecha de devolucion, los detalles y el nombre completo del usuario son obligatorios para actualizar el préstamo." });
+//         }
+//         const db = req.app.get('db');
+//         const connection = await db.getConnection();
+    
+//         try{
+//             await connection.beginTransaction();
+    
+//             //Verificación - Buscar id_usuario a partir del nombre y apellido del usuario
+//             const queryU = `SELECT id_usuario FROM Usuario WHERE nombre = ? AND apellido = ? LIMIT 1`;
+//             const [resultU] = await connection.query(queryU, [nombre_usuario, apellido_usuario]);
+            
+//             if (resultU.length === 0) {
+//                 await connection.rollback();
+//                 return res.status(404).json({ error: "Usuario no encontrado." });
+//               }
+//               const id_usuario = resultU[0].id_usuario;
+    
+//             //Actualizar datos de préstamo
+//             const queryP = `UPDATE Prestamo
+//             SET fecha_devolucion = ?, estado = ?, id_usuario = ?, total_libros = ? WHERE id_prestamo = ?`;
+//             const total_libros = detalles.length;
+//             const [resultsP] = await connection.query(queryP, [fecha_devolucion, estado, id_usuario, total_libros, id_prestamo]);
+    
+//             if (resultsP.affectedRows === 0) {
+//                 await connection.rollback();
+//                 return res.status(404).json({ error: "Préstamo no encontrado." });
+//               }
+//               // Eliminar detalles existentes
+//               const queryED = `DELETE FROM Detalles_prestamo WHERE id_prestamo = ?`;
+//               await connection.query(queryED, [id_prestamo]);
+              
+//               // Insertar nuevos detalles
+//               const queryD = `INSERT INTO Detalles_prestamo (id_libro, id_prestamo) VALUES ?`;
+//               const valoresDetalles = detalles.map((id_libro) => [id_libro, id_prestamo]);
+//               await connection.query(queryD, [valoresDetalles]);
+    
+//               await connection.commit();
+//               res.status(200).json({message: "Préstamo actualizado con éxito. "});
+//         }
+//         catch(error){
+//             await connection.rollback();
+//             console.error('Error al acutalizar el préstamo', error);
+//             res.status(500).json({error: 'Error al actualizar préstamo. '});
+//         }
+//         finally{
+//             connection.release();
+//         }
+//     };
+
+//DELETE - Eliminar préstamos --------------------------------------------------------------------------------------------------------------------------
+
+// const eliminarPrestamo = async (req,res) =>
+//     {
+//         const db = req.app.get('db');
+//         const id_prestamo = parseInt(req.params.id, 10);
+
+//     if (isNaN(id_prestamo)) {
+//         return res.status(400).json({ error: "El ID del préstamo debe ser un número válido." });
+//       }
+//       const connection = await db.getConnection();
+//       try{
+//         await connection.beginTransaction();
+//         //Eliminar detalles del préstamo seleccionado
+//         const queryD = `DELETE FROM Detalles_prestamo WHERE id_prestamo = ?`;
+//         await connection.query(queryD, [id_prestamo]);
+
+//         //Eliminar préstamo
+//         const queryP = `DELETE FROM Prestamo WHERE id_prestamo = ?`;
+//         const [resultsP] = await connection.query(queryP, [id_prestamo]);
+
+//         if (resultsP.affectedRows === 0) {
+//             await connection.rollback();
+//             return res.status(404).json({ error: "Préstamo no encontrado." });
+//           }
+//           await connection.commit();
+//           res.status(200).json({ message: "Préstamo eliminado con éxito." });
+//         }
+//       catch(error){
+//         await connection.rollback();
+//         console.error("Error al eliminar el préstamo", error);
+//         res.status(500).json({error: 'Error al eliminar el préstamo. '})
+//       }
+//       finally{
+//         connection.release();
+//       }   
+//     };

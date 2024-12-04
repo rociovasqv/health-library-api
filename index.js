@@ -1,5 +1,6 @@
 import express from 'express';
 import connectDB from './config/db.js';
+import cronJob from './cronJob.js';
 import libroRoutes from './routes/libroRoutes.js';
 import usuarioRoutes from './routes/usuarioRoutes.js';
 import prestamoRoutes from './routes/prestamoRoutes.js';
@@ -40,3 +41,7 @@ const iniciarServidor = async () => {
     }
 };
 iniciarServidor();
+
+//Cron - Cambio de estado automático de préstamo
+cronJob();
+console.log("Cron job inicializado.");
