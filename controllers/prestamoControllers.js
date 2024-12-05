@@ -135,9 +135,13 @@ const getPrestamo = async (req, res) => {
 const actualizarPrestamo = async (req, res) => {
     const db = req.app.get('db');
     const id_prestamo = parseInt(req.params.id, 10);
+    const {estado} = req.body;
 
     if (isNaN(id_prestamo)) {
         return res.status(400).json({ error: "El ID del préstamo debe ser un número válido." });
+    }
+    if (!estado || estado !== 'devuelto') {
+        return res.status(400).json({ error: "El estado debe ser 'devuelto' para finalizar el préstamo." });
     }
 
     const connection = await db.getConnection();
@@ -158,8 +162,8 @@ const actualizarPrestamo = async (req, res) => {
 
         // Actualizar el estado del préstamo
         await connection.query(
-            `UPDATE Prestamo SET estado = 'devuelto' WHERE id_prestamo = ?`,
-            [id_prestamo]
+            `UPDATE Prestamo SET estado = ? WHERE id_prestamo = ?`,
+            [estado, id_prestamo]
         );
 
         // Obtener los libros relacionados al préstamo

@@ -1,4 +1,5 @@
 -- Consultas----
+USE biblioteca_med;
 SELECT * FROM libro;
 SELECT * FROM usuario;
 SELECT * FROM autor;
@@ -15,15 +16,14 @@ L.idioma as "Idioma",
 L.disponible as "Disponible", 
 group_concat(concat(A.nombre, ' ', A.apellido) separator ', ') as "Autor/es", 
 E.nombre as "Editorial",
-C.nombre_categoria as "Categoría"
---  GROUP_CONCAT(DISTINCT C.nombre_categoria SEPARATOR ', ') AS "Categorías" (En caso de agregar más de una categorías)
+C.nombre_categoria AS "Categoría"
 FROM libro L
-JOIN libro_autor LA ON L.id_libro = LA.id_libro
-JOIN autor A ON LA.id_autor = A.id_autor
-JOIN libro_editorial LE ON L.id_libro = LE.id_libro
-JOIN editorial E ON LE.id_editorial = E.id_editorial
-JOIN libro_categoria LC ON L.id_libro = LC.id_libro
-JOIN categoria C ON LC.id_libro = C.id_categoria
+LEFT JOIN libro_autor LA ON L.id_libro = LA.id_libro
+LEFT JOIN autor A ON LA.id_autor = A.id_autor
+LEFT JOIN libro_editorial LE ON L.id_libro = LE.id_libro
+LEFT JOIN editorial E ON LE.id_editorial = E.id_editorial
+LEFT JOIN libro_categoria LC ON L.id_libro = LC.id_libro
+LEFT JOIN categoria C ON LC.id_categoria = C.id_categoria
 GROUP BY L.id_libro, E.nombre, C.nombre_categoria;
 
 -- Consulta de un libro con toda la información completa por id
@@ -45,7 +45,7 @@ LEFT JOIN libro_editorial LE ON L.id_libro = LE.id_libro
 LEFT JOIN editorial E ON LE.id_editorial = E.id_editorial
 LEFT JOIN libro_categoria LC ON L.id_libro = LC.id_libro
 LEFT JOIN categoria C ON LC.id_categoria = C.id_categoria
-WHERE L.id_libro = 5;
+WHERE L.id_libro = 6;
 -- Otra forma de consulta un libro por id
 SELECT L.id_libro AS "ID Libro",
 L.codigo AS "Código ISBN",

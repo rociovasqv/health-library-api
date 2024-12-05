@@ -66,32 +66,23 @@ const listarLibros = async (req, res) => {
     try {
       const db = req.app.get('db');
       const query = `
-        SELECT 
-            L.id_libro AS "ID Libro",
-            L.codigo AS "Código ISBN",
-            L.titulo AS "Título",
-            L.anio_publicacion AS "Año de Publicación",
-            L.idioma AS "Idioma",
-            L.disponible AS "Disponible",
-            GROUP_CONCAT(DISTINCT CONCAT(A.nombre, ' ', A.apellido) SEPARATOR ', ') AS "Autor/es",
-            E.nombre AS "Editorial",
-            GROUP_CONCAT(DISTINCT C.nombre_categoria SEPARATOR ', ') AS "Categorías"
-        FROM 
-            Libro L
-        LEFT JOIN 
-            Libro_autor LA ON L.id_libro = LA.id_libro
-        LEFT JOIN 
-            Autor A ON LA.id_autor = A.id_autor
-        LEFT JOIN 
-            Libro_editorial LE ON L.id_libro = LE.id_libro
-        LEFT JOIN 
-            Editorial E ON LE.id_editorial = E.id_editorial
-        LEFT JOIN 
-            Libro_categoria LC ON L.id_libro = LC.id_libro
-        LEFT JOIN 
-            Categoria C ON LC.id_categoria = C.id_categoria
-        GROUP BY 
-            L.id_libro, L.codigo, L.titulo, L.anio_publicacion, L.idioma, L.disponible, E.nombre;
+        SELECT L.id_libro AS "ID Libro",
+        L.codigo AS "Código ISBN",
+        L.titulo AS "Título",
+        L.anio_publicacion AS "Año de Publicación",
+        L.idioma AS "Idioma",
+        L.disponible AS "Disponible",
+        GROUP_CONCAT(DISTINCT CONCAT(A.nombre, ' ', A.apellido) SEPARATOR ', ') AS "Autor/es",
+        E.nombre AS "Editorial",
+        GROUP_CONCAT(DISTINCT C.nombre_categoria SEPARATOR ', ') AS "Categorías"
+        FROM Libro L
+        LEFT JOIN Libro_autor LA ON L.id_libro = LA.id_libro
+        LEFT JOIN Autor A ON LA.id_autor = A.id_autor
+        LEFT JOIN Libro_editorial LE ON L.id_libro = LE.id_libro
+        LEFT JOIN Editorial E ON LE.id_editorial = E.id_editorial
+        LEFT JOIN Libro_categoria LC ON L.id_libro = LC.id_libro
+        LEFT JOIN Categoria C ON LC.id_categoria = C.id_categoria
+        GROUP BY L.id_libro, L.codigo, L.titulo, L.anio_publicacion, L.idioma, L.disponible, E.nombre;
       `;
       const [results] = await db.query(query);        // Usa await correctamente sin callbacks
       res.status(200).json(results);
@@ -117,23 +108,15 @@ const buscarLibro = async (req,res) =>
                 GROUP_CONCAT(DISTINCT CONCAT(A.nombre, ' ', A.apellido) SEPARATOR ', ') AS "Autor/es",
                 E.nombre AS "Editorial",
                 GROUP_CONCAT(DISTINCT C.nombre_categoria SEPARATOR ', ') AS "Categorías"
-            FROM 
-                Libro L
-            LEFT JOIN 
-                Libro_autor LA ON L.id_libro = LA.id_libro
-            LEFT JOIN 
-                Autor A ON LA.id_autor = A.id_autor
-            LEFT JOIN 
-                Libro_editorial LE ON L.id_libro = LE.id_libro
-            LEFT JOIN 
-                Editorial E ON LE.id_editorial = E.id_editorial
-            LEFT JOIN 
-                Libro_categoria LC ON L.id_libro = LC.id_libro
-            LEFT JOIN 
-                Categoria C ON LC.id_categoria = C.id_categoria
+            FROM Libro L
+            LEFT JOIN Libro_autor LA ON L.id_libro = LA.id_libro
+            LEFT JOIN Autor A ON LA.id_autor = A.id_autor
+            LEFT JOIN Libro_editorial LE ON L.id_libro = LE.id_libro
+            LEFT JOIN Editorial E ON LE.id_editorial = E.id_editorial
+            LEFT JOIN Libro_categoria LC ON L.id_libro = LC.id_libro
+            LEFT JOIN Categoria C ON LC.id_categoria = C.id_categoria
             WHERE L.id_libro = ?
-            GROUP BY 
-                L.id_libro, L.codigo, L.titulo, L.anio_publicacion, L.idioma, L.disponible, E.nombre;
+            GROUP BY L.id_libro, L.codigo, L.titulo, L.anio_publicacion, L.idioma, L.disponible, E.nombre;
           `;
           const [results] = await db.query(query, [id_libro]);
           if (results.length === 0) {
@@ -205,11 +188,19 @@ const editarLibro = async (req,res) =>
      if (!id_libro || !codigo || !titulo || !anio_publicacion || !idioma || disponible === undefined) {
         return res.status(400).json({ error: "Todos los campos son obligatorios para actualizar un libro." });
     }
-
     try{
         const db = req.app.get('db');
-        await db.query(
-            "UPDATE Libro SET codigo = ?, titulo = ?, anio_publicacion = ?, idioma = ?, disponible = ? WHERE id_libro = ?",
+        //Verificar si el libro está disponible
+        const [libro] = await db.query("SELECT disponible FROM Libro WHERE id_libro = ?", [id_libro]);
+
+        if (libro.length === 0) {
+            return res.status(404).json({ error: "Libro no encontrado." });
+        }
+        if (!libro[0].disponible) {
+            return res.status(400).json({ error: "No se puede eliminar un libro que no está disponible." });
+        }
+        //Actualizar libro
+        await db.query("UPDATE Libro SET codigo = ?, titulo = ?, anio_publicacion = ?, idioma = ?, disponible = ? WHERE id_libro = ?",
             [codigo, titulo, anio_publicacion, idioma, disponible, id_libro]
         );
         // Verificar y actualizar autor
@@ -244,6 +235,15 @@ const eliminarLibro = async (req, res) => {
     const db = req.app.get('db');
     const id_libro = req.params.id;
     try {
+        //Verificar si el libro está disponible
+        const [libro] = await db.query("SELECT disponible FROM Libro WHERE id_libro = ?", [id_libro]);
+
+        if (libro.length === 0) {
+            return res.status(404).json({ error: "Libro no encontrado." });
+        }
+        if (!libro[0].disponible) {
+            return res.status(400).json({ error: "No se puede eliminar un libro que no está disponible." });
+        }
         //Eliminar relaciones intermedias
         await db.query("DELETE FROM libro_autor WHERE id_libro = ?", [id_libro]);
         await db.query("DELETE FROM libro_editorial WHERE id_libro = ?", [id_libro]);
