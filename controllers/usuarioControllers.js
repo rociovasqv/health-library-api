@@ -119,6 +119,17 @@ const eliminarUsuario = async (req,res) =>
       }
 
     try{
+        // Verificar si el usuario tiene préstamos activos o atrasados
+        const [prestamos] = await db.query(
+            `SELECT estado FROM Prestamo WHERE id_usuario = ? AND (estado = 'activo' OR estado = 'atrasado')`,
+            [id_usuario]
+        );
+
+        if (prestamos.length > 0) {
+            return res.status(400).json({ 
+                error: "No se puede eliminar el usuario porque tiene préstamos activos o atrasados." 
+            });
+        }
         const query = `DELETE FROM Usuario WHERE id_usuario = ?`;
         const [results] = await db.query(query, [id_usuario]);
 
