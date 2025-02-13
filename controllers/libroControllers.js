@@ -5,7 +5,8 @@ import categoriaControllers from "./categoriaControllers.js";
 
 // CREATE - Crear/registrar nuevos libros --------------------------------------------------------------------------------------------------------------------------
 
-const registrarLibro = async (req,res) => {
+const registrarLibro = async (req, res) => {
+    const db = req.app.get('db');
     const {
         codigo,
         titulo,
@@ -18,47 +19,57 @@ const registrarLibro = async (req,res) => {
         nombre_editorial,
         pais_editorial,
         nombre_categoria,
-    } = req.body
+    } = req.body;
 
- // Validación de datos
- if (
-    !codigo ||
-    !titulo ||
-    !anio_publicacion ||
-    !idioma ||
-    disponible === undefined
-  ) {
-    return res
-      .status(400)
-      .json({ error: "Todos los campos son obligatorios para registrar un libro." });
-  }
-  
-    try{
-        const db = req.app.get('db');
+    // Validación de datos
+    if (
+        !codigo ||
+        !titulo ||
+        !anio_publicacion ||
+        !idioma ||
+        disponible === undefined
+    ) {
+        return res
+            .status(400)
+            .json({ error: "Todos los campos son obligatorios para registrar un libro." });
+    }
 
-        // Agregar autor, editorial y categoría
-        const id_autor = await autorControllers.agregarAutor(db, nombre_autor, apellido_autor, nacionalidad_autor);
-        const id_editorial = await editorialControllers.agregarEditorial(db, nombre_editorial, pais_editorial);
-        const id_categoria = await categoriaControllers.agregarCategoria(db, nombre_categoria);
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+
+        // Agregar autor
+        const id_autor = await autorControllers.agregarAutor(connection, nombre_autor, apellido_autor, nacionalidad_autor);
+        
+        // Verificar o agregar editorial
+        let id_editorial = await editorialControllers.verificarEditorial(connection, nombre_editorial, pais_editorial);
+        if (!id_editorial) {
+            id_editorial = await editorialControllers.agregarEditorial(connection, nombre_editorial, pais_editorial);
+        }
+
+        // Agregar categoría
+        const id_categoria = await categoriaControllers.agregarCategoria(connection, nombre_categoria);
 
         // Insertar el libro
-        const [result] = await db.query(
-            "INSERT INTO Libro (codigo, titulo, anio_publicacion, idioma, disponible) VALUES (?, ?, ?, ?, ?)",
-            [codigo, titulo, anio_publicacion, idioma, disponible]
+        const [result] = await connection.query(
+            "INSERT INTO Libro (codigo, titulo, anio_publicacion, idioma, disponible, id_editorial, tirada) VALUES (?, ?, ?, ?, ?, ?)",
+            [codigo, titulo, anio_publicacion, idioma, disponible, id_editorial, tirada]
         );
 
         const id_libro = result.insertId;
 
-        // Relacionar el libro con autor, editorial y categoría
-        await autorControllers.relacionarLA(db, id_libro, id_autor);
-        await editorialControllers.relacionarLE(db, id_libro, id_editorial);
-        await categoriaControllers.relacionarLC(db, id_libro, id_categoria);
+        // Relacionar el libro con autor y categoría
+        await autorControllers.relacionarLA(connection, id_libro, id_autor);
+        await categoriaControllers.relacionarLC(connection, id_libro, id_categoria);
 
+        await connection.commit();
         res.status(201).json({ message: 'Libro registrado correctamente.' });
-    }
-    catch(error){
+    } catch (error) {
+        await connection.rollback();
         console.error("Error al registrar un libro", error);
         res.status(500).json({ error: 'Error al registrar el libro.' });
+    } finally {
+        connection.release();
     }
 };
 //READ / GET ALL - Listar libros --------------------------------------------------------------------------------------------------------------------------
@@ -72,14 +83,14 @@ const listarLibros = async (req, res) => {
         L.anio_publicacion AS "Año de Publicación",
         L.idioma AS "Idioma",
         L.disponible AS "Disponible",
+        L.tirada AS Cantidad,
         GROUP_CONCAT(DISTINCT CONCAT(A.nombre, ' ', A.apellido) SEPARATOR ', ') AS "Autor/es",
         E.nombre AS "Editorial",
-        GROUP_CONCAT(DISTINCT C.nombre_categoria SEPARATOR ', ') AS "Categorías"
+        GROUP_CONCAT(DISTINCT C.nombre_categoria SEPARATOR ', ') AS "Categorías",
         FROM Libro L
         LEFT JOIN Libro_autor LA ON L.id_libro = LA.id_libro
         LEFT JOIN Autor A ON LA.id_autor = A.id_autor
-        LEFT JOIN Libro_editorial LE ON L.id_libro = LE.id_libro
-        LEFT JOIN Editorial E ON LE.id_editorial = E.id_editorial
+        LEFT JOIN Editorial E ON L.id_editorial = E.id_editorial
         LEFT JOIN Libro_categoria LC ON L.id_libro = LC.id_libro
         LEFT JOIN Categoria C ON LC.id_categoria = C.id_categoria
         GROUP BY L.id_libro, L.codigo, L.titulo, L.anio_publicacion, L.idioma, L.disponible, E.nombre;
@@ -111,8 +122,7 @@ const buscarLibro = async (req,res) =>
             FROM Libro L
             LEFT JOIN Libro_autor LA ON L.id_libro = LA.id_libro
             LEFT JOIN Autor A ON LA.id_autor = A.id_autor
-            LEFT JOIN Libro_editorial LE ON L.id_libro = LE.id_libro
-            LEFT JOIN Editorial E ON LE.id_editorial = E.id_editorial
+            LEFT JOIN Editorial E ON L.id_editorial = E.id_editorial
             LEFT JOIN Libro_categoria LC ON L.id_libro = LC.id_libro
             LEFT JOIN Categoria C ON LC.id_categoria = C.id_categoria
             WHERE L.id_libro = ?
@@ -151,8 +161,7 @@ const getLibro = async (req,res) =>
         FROM libro L
         LEFT JOIN libro_autor LA ON L.id_libro = LA.id_libro
         LEFT JOIN autor A ON LA.id_autor = A.id_autor
-        LEFT JOIN libro_editorial LE ON L.id_libro = LE.id_libro
-        LEFT JOIN editorial E ON LE.id_editorial = E.id_editorial
+        LEFT JOIN editorial E ON L.id_editorial = E.id_editorial
         LEFT JOIN libro_categoria LC ON L.id_libro = LC.id_libro
         LEFT JOIN categoria C ON LC.id_categoria = C.id_categoria
         WHERE L.id_libro = ?`;
@@ -170,7 +179,8 @@ const getLibro = async (req,res) =>
 // UPDATE - Editar/actualizar libros --------------------------------------------------------------------------------------------------------------------------
 const editarLibro = async (req,res) =>
 {
-    const id_libro = req.params.id
+    const db = req.app.get('db');
+    const id_libro = req.params.id;
     const {
         codigo,
         titulo,
@@ -188,8 +198,9 @@ const editarLibro = async (req,res) =>
      if (!id_libro || !codigo || !titulo || !anio_publicacion || !idioma || disponible === undefined) {
         return res.status(400).json({ error: "Todos los campos son obligatorios para actualizar un libro." });
     }
+    const connection = await db.getConnection();
     try{
-        const db = req.app.get('db');
+        await connection.beginTransaction();
         //Verificar si el libro está disponible
         const [libro] = await db.query("SELECT disponible FROM Libro WHERE id_libro = ?", [id_libro]);
 
@@ -199,10 +210,7 @@ const editarLibro = async (req,res) =>
         if (!libro[0].disponible) {
             return res.status(400).json({ error: "No se puede eliminar un libro que no está disponible." });
         }
-        //Actualizar libro
-        await db.query("UPDATE Libro SET codigo = ?, titulo = ?, anio_publicacion = ?, idioma = ?, disponible = ? WHERE id_libro = ?",
-            [codigo, titulo, anio_publicacion, idioma, disponible, id_libro]
-        );
+
         // Verificar y actualizar autor
         let id_autor = await autorControllers.verificarAutor(db,nombre_autor, apellido_autor);
         if (!id_autor){
@@ -215,7 +223,8 @@ const editarLibro = async (req,res) =>
         if(!id_editorial){
             id_editorial = await editorialControllers.agregarEditorial(db, nombre_editorial, pais_editorial);
         }
-        await editorialControllers.relacionarLE(db, id_libro, id_editorial);
+        // await editorialControllers.actualizarEditorial(db, id_libro, id_editorial);
+        // await editorialControllers.relacionarLE(db, id_libro, id_editorial);
 
         // Verificar y actualizar categoría
         let id_categoria = await categoriaControllers.verificarCategoria(db,nombre_categoria);
@@ -223,11 +232,20 @@ const editarLibro = async (req,res) =>
             id_categoria = await categoriaControllers.agregarCategoria(db, nombre_categoria);
         }
         await categoriaControllers.relacionarLC(db, id_libro, id_categoria);
+
+         //Actualizar libro
+         await db.query("UPDATE Libro SET codigo = ?, titulo = ?, anio_publicacion = ?, idioma = ?, disponible = ?, id_editorial = ? WHERE id_libro = ?",
+            [codigo, titulo, anio_publicacion, idioma, disponible, id_editorial, id_libro]
+        );
+        await connection.commit();
         res.status(200).json({ message: 'Libro actualizado correctamente.' });
     }
     catch(error){
+    await connection.rollback();
     console.error("Error al actualizar un libro", error);
     res.status(500).json({ error: 'Error al actualizar el libro. Intente de nuevo' });
+    }finally {
+        connection.release();
     }
 };
 // DELETE - Eliminar libro --------------------------------------------------------------------------------------------------------------------------
@@ -246,8 +264,8 @@ const eliminarLibro = async (req, res) => {
         }
         //Eliminar relaciones intermedias
         await db.query("DELETE FROM libro_autor WHERE id_libro = ?", [id_libro]);
-        await db.query("DELETE FROM libro_editorial WHERE id_libro = ?", [id_libro]);
         await db.query("DELETE FROM libro_categoria WHERE id_libro = ?", [id_libro]);
+        // await db.query("DELETE FROM libro_editorial WHERE id_libro = ?", [id_libro]);
 
         //Eliminar el libro
         const [result] = await db.query("DELETE FROM Libro WHERE id_libro = ?", [id_libro]);
@@ -256,7 +274,21 @@ const eliminarLibro = async (req, res) => {
         if (result.affectedRows === 0) {
             return res.status(404).json({ error: "Libro no encontrado." });
         }
-        res.status(200).json({ message: "Libro eliminado correctamente." });
+
+         // Obtener el id_editorial del libro eliminado
+         const id_editorial = libro[0].id_editorial;
+         
+        //Verificar si la editorial tiene más libros asociado
+        const [editorial] = await db.query("SELECT COUNT(*) AS cantidad_libros FROM Libro WHERE id_editorial = ?", [id_editorial]);
+        // Si la editorial tiene más libros, no la eliminamos
+        if (editorial[0].cantidad_libros > 0) { 
+            console.log("La editorial sigue siendo usada por otros libros.");
+        } else {
+            // Si no hay más libros asociados, podemos eliminar la editorial (si así lo deseas)
+            // await db.query("DELETE FROM Editorial WHERE id_editorial = ?", [id_editorial]);
+            console.log("La editorial no tiene más libros asociados.");
+        }
+        res.status(200).json({ message: "Libro eliminado correctamente. La editorial no se eliminó." });
     } catch (error) {
         console.error("Error al eliminar el libro:", error);
         res.status(500).json({ error: "Error al eliminar el libro." });

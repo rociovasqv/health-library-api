@@ -14,6 +14,12 @@ const crearPrestamo = async (req,res) =>
         if (!fecha_devolucion || !nombre_usuario || !apellido_usuario || !Array.isArray(libros) || libros.length === 0) {
             return res.status(400).json({ error: "La fecha de devolucion, los libros (detalles) y el nombre completo del usuario son obligatorios para realizar el préstamo." });
         }
+        const fechaActual = new Date();
+        const fechaDevol = new Date(fecha_devolucion);
+
+        if( fechaDevol < fechaActual.setHours(0,0,0,0)){
+            return res.status(400).json({error: "La fecha de devolución debe ser hoy o en adelante, en el futuro"})
+        }
         //Verificar disponibilidad de los libros (los libros son un array de IDS)
         const queryDisponible = `SELECT id_libro, disponible FROM Libro WHERE id_libro IN (?) AND disponible = 0`;
         const [noDisponible] = await db.query(queryDisponible, [libros]);
